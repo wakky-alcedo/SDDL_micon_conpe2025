@@ -31,18 +31,10 @@ void setup() {
   Serial.println("Connected to WiFi");
   udp.begin(senderPort);
   Serial.printf("UDP sender started on port %d\n", senderPort);
-  // for (int i = 0; i < samplesPerPacket; i++) {
-  //   pcmValue = (i % 256) - 128; // テスト用のデータ
-  //   pcmBuffer[i * 2] = (pcmValue >> 0) & 0xFF;     // 下位バイト
-  //   pcmBuffer[i * 2 + 1] = (pcmValue >> 8) & 0xFF; // 上位バイト
-  //   delayMicroseconds(1000000 / sampleRate);
-  // }
 }
 
-// int16_t pcmValue;
-// static uint8_t pcmBuffer[packetSize];
+
 void loop() {
-  // static uint8_t pcmBuffer[packetSize];
   for (int i = 0; i < samplesPerPacket; i++) {
     int rawValue = analogRead(micPin);
     // 12ビットのADC値を16ビットの符号付き整数にマッピング
@@ -51,13 +43,6 @@ void loop() {
     pcmBuffer[i * 2 + 1] = (pcmValue >> 8) & 0xFF; // 上位バイト
     delayMicroseconds(1000000 / sampleRate);
   }
-  // 一旦コメントアウトして、テスト用のデータを送信
-  // for (int i = 0; i < samplesPerPacket; i++) {
-  //   pcmValue = (i % 256) - 128; // テスト用のデータ
-  //   pcmBuffer[i * 2] = (pcmValue >> 0) & 0xFF;     // 下位バイト
-  //   pcmBuffer[i * 2 + 1] = (pcmValue >> 8) & 0xFF; // 上位バイト
-  //   delayMicroseconds(1000000 / sampleRate);
-  // }
 
   udp.beginPacket(receiverIP, receiverPort);
   udp.write(pcmBuffer, packetSize);
