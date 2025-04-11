@@ -169,18 +169,18 @@ void loop() {
   client.loop();
 
   // ライトセンサー
-  uint8_t lightStatus = analogRead(lightSensorPin); // ライトセンサーの値を読み取る
-  static uint8_t showCount = 0; // statusを表示用のカウンタ
+  static uint16_t showCount = 0; // statusを表示用のカウンタ
   showCount++;
-  // if (showCount >= 255) { // 10回ごとに表示
-  //   showCount = 0;
-  //   Serial.println("Light Sensor Value: " + String(lightStatus));
-  // }
-  static bool prevLightStatus = false; // 前回のライトの状態を保存する変数
-  if (prevLightStatus != lightStatus > threshold) {
-    publishStatus(lightStatus > threshold);
+  if (showCount >= 500) { // ADCの処理頻度が高いと値が安定しない
+    showCount = 0;
+    uint8_t lightValue = analogRead(lightSensorPin);
+    Serial.println("Light Sensor Value: " + String(lightValue));
+    static bool prevLightStatus = false; // 前回のライトの状態を保存する変数
+    if (prevLightStatus != lightValue > threshold) {
+      publishStatus(lightValue > threshold);
+    }
+    prevLightStatus = lightValue > threshold; // 現在の状態を保存
   }
-  prevLightStatus = lightStatus > threshold; // 現在の状態を保存
 
   // 通話中の処理
   if (isCalling) {
