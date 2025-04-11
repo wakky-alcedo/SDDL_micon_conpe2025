@@ -8,20 +8,37 @@ const char* ssid = "SDDLnet";
 const char* password = "smallbear";
 
 // MQTTブローカーの設定
-const char* mqtt_server = "192.168.0.206";
+const char* mqtt_server = "192.168.0.206"; // MQTTブローカーのIPアドレス todo
 const int mqtt_port = 1883;
-const char* mqtt_client_id = "ESP32Client-"; // クライアントIDはユニークにするためにプレフィックスを追加
+const char* mqtt_client_id = "ESP32Client-1st_lab"; // クライアントIDはユニークにするためにプレフィックスを追加
 const char* mqtt_user = "";         // MQTTブローカーに認証が必要な場合は設定
 const char* mqtt_password = "";     // MQTTブローカーに認証が必要な場合は設定
 
 // トピックの設定
-const char* subscribeTopic = "/esp32/control";
-const char* publishTopic = "/esp32/status";
+const char* subscribeTopic_1l = "/esp32_1l/control";   // 1st lab       5ddからの通話開始
+const char* publishTopic_1l = "/esp32_1l/status";      // 1st lab       ライト
+const char* subscribeTopic_5dk = "/esp32_5dk/control"; // 5th dorm key
+const char* publishTopic_5dk = "/esp32_5dk/status";    // 5th dorm key
+const char* subscribeTopic_5dd = "/esp32_5dd/control"; // 5th dorm door
+const char* publishTopic_5dd = "/esp32_5dd/status";    // 5th dorm door
 
 WiFiClient espClient;
 PubSubClient client(espClient);
 unsigned long lastReconnectAttempt = 0;
 unsigned long startTime = 0;
+
+// constexpr int lightSensorVccPin = 22; // ライトセンサーのピン番号を定義 (GPIO34を使用)
+constexpr int lightSensorPin = 35
+; // ライトセンサーのピン番号を定義 (GPIO27を使用)
+constexpr uint8_t threshold = 100; // ライトセンサーのしきい値を定義 (適宜調整してください)
+constexpr uint8_t callLedPin = 4; // ライトセンサーのVccピンを定義 (GPIO22を使用)
+
+// 関数のプロトタイプ宣言
+void setup_wifi();
+void callback(char* topic, byte* payload, unsigned int length);
+void reconnect();
+void publishStatus(bool lightStatus = false);
+void publishTopic(const char* topic, String statusMessage);
 
 void setup_wifi() {
   delay(10);
@@ -43,28 +60,34 @@ void setup_wifi() {
 }
 
 void callback(char* topic, byte* payload, unsigned int length) {
-  Serial.print("Message arrived in topic: ");
-  Serial.println(topic);
-  Serial.print("Message:");
-  for (int i = 0; i < length; i++) {
-    Serial.print((char)payload[i]);
-  }
-  Serial.println(""); // 改行を追加
-  // payloadを文字列に変換
+  Serial.println("Topic: " + String(topic));
   String message = String((char*)payload).substring(0, length);
-  // payloadがonの場合、LEDを点灯
-  if (message == "on") {
-    Serial.println("LED ON");
-    // LEDを点灯する処理をここに追加
-  } else if (message == "off") {
-    Serial.println("LED OFF");
-    // LEDを消灯する処理をここに追加
-  } else {
-    Serial.println("Unknown command");
+  Serial.println("Message: " + message);
+
+  // 受信したトピックに応じて処理を分岐
+  if (String(topic) == String(subscribeTopic_1l)) {
+    Serial.println("Received message on topic: " + String(topic));
+    // messageに"call start: "が含まれていたら、
+    if (message.indexOf("call start: ") != -1) {
+      Serial.println("Call started!");
+      digitalWrite(callLedPin, LOW);
+      // messageから"call start: "を取り除き、IPアドレスを取得
+      String senderIpAddress = message.substring(message.indexOf("call start: ") + 12);
+      Serial.println("Sender IP Address: " + senderIpAddress);
+      // 自分のIPアドレスを発信
+      String myIpAddress = WiFi.localIP().toString();
+      publishTopic(publishTopic_1l, myIpAddress);
+    } else if (message.indexOf("call end: ") != -1) {
+      Serial.println("Call ended!");
+      digitalWrite(callLedPin, HIGH);
+    }
+  } else if (String(topic) == String(publishTopic_5dd)) {
+    Serial.println("Received message on topic: " + String(topic));
+  } else if (String(topic) == String(publishTopic_5dk)) {
+    Serial.println("Received message on topic: " + String(topic));
   }
 
 
-  Serial.println();
   Serial.println("-----------------------");
 }
 
@@ -76,7 +99,9 @@ void reconnect() {
     clientId += WiFi.macAddress();
     if (client.connect(clientId.c_str(), mqtt_user, mqtt_password)) {
       Serial.println("connected");
-      client.subscribe(subscribeTopic);
+      client.subscribe(subscribeTopic_1l);
+      client.subscribe(publishTopic_5dd);
+      client.subscribe(publishTopic_5dk);
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
@@ -86,10 +111,13 @@ void reconnect() {
   }
 }
 
-void publishStatus() {
-  unsigned long currentTime = millis() - startTime;
-  String statusMessage = "Uptime: " + String(currentTime / 1000) + " seconds";
-  client.publish(publishTopic, statusMessage.c_str());
+void publishStatus(bool lightStatus) {
+  String statusMessage = "light status: " + String(lightStatus ? "on" : "off");
+  publishTopic(publishTopic_1l, statusMessage);
+}
+
+void publishTopic(const char* topic, String statusMessage) {
+  client.publish(topic, statusMessage.c_str());
   Serial.print("Published status: ");
   Serial.println(statusMessage);
 }
@@ -100,6 +128,11 @@ void setup() {
   client.setServer(mqtt_server, mqtt_port);
   client.setCallback(callback);
   startTime = millis();
+
+  // pinMode(lightSensorVccPin, OUTPUT); // ライトセンサーのVccピンを出力に設定
+  // digitalWrite(lightSensorVccPin, HIGH); // ライトセンサーのVccピンをHIGHに設定
+  pinMode(lightSensorPin, INPUT); // ライトセンサーの入力ピンを設定
+  pinMode(callLedPin, OUTPUT); // ライトセンサーのLEDピンを出力に設定
 }
 
 void loop() {
@@ -112,10 +145,18 @@ void loop() {
   }
   client.loop();
 
-  // 5秒ごとにステータスをPublish
-  if (millis() - lastReconnectAttempt > 5000 && client.connected()) {
-    publishStatus();
-    lastReconnectAttempt = millis(); // publish後もタイマーをリセット
+  uint8_t lightStatus = analogRead(lightSensorPin); // ライトセンサーの値を読み取る
+  static uint8_t showCount = 0; // statusを表示用のカウンタ
+  showCount++;
+  if (showCount >= 5) { // 10回ごとに表示
+    showCount = 0;
+    Serial.println("Light Sensor Value: " + String(lightStatus));
   }
-  delay(100); // CPU負荷軽減のためเล็กน้อยの遅延
+  static bool prevLightStatus = false; // 前回のライトの状態を保存する変数
+  if (prevLightStatus != lightStatus > threshold) {
+    publishStatus(lightStatus > threshold);
+  }
+  prevLightStatus = lightStatus > threshold; // 現在の状態を保存
+
+  delay(100); // CPU負荷軽減のために少し待機
 }

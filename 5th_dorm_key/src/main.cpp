@@ -10,18 +10,24 @@ const char* password = "smallbear";
 // MQTTブローカーの設定
 const char* mqtt_server = "192.168.0.206";
 const int mqtt_port = 1883;
-const char* mqtt_client_id = "ESP32Client-"; // クライアントIDはユニークにするためにプレフィックスを追加
+const char* mqtt_client_id = "ESP32Client-5th_dorm_key"; // クライアントIDはユニークにするためにプレフィックスを追加
 const char* mqtt_user = "";         // MQTTブローカーに認証が必要な場合は設定
 const char* mqtt_password = "";     // MQTTブローカーに認証が必要な場合は設定
 
 // トピックの設定
-const char* subscribeTopic = "/esp32/control";
-const char* publishTopic = "/esp32/status";
+const char* subscribeTopic_1l = "/esp32_1l/control";   // 1st lab       5ddからの通話開始、IPアドレス送る
+const char* publishTopic_1l = "/esp32_1l/status";      // 1st lab       ライト、IPアドレス
+const char* subscribeTopic_5dk = "/esp32_5dk/control"; // 5th dorm key
+const char* publishTopic_5dk = "/esp32_5dk/status";    // 5th dorm key
+const char* subscribeTopic_5dd = "/esp32_5dd/control"; // 5th dorm door
+const char* publishTopic_5dd = "/esp32_5dd/status";    // 5th dorm door
 
 WiFiClient espClient;
 PubSubClient client(espClient);
 unsigned long lastReconnectAttempt = 0;
 unsigned long startTime = 0;
+
+constexpr int ledPin = 2; // LEDのピン番号を定義 (GPIO2を使用)
 
 void setup_wifi() {
   delay(10);
@@ -43,28 +49,28 @@ void setup_wifi() {
 }
 
 void callback(char* topic, byte* payload, unsigned int length) {
-  Serial.print("Message arrived in topic: ");
-  Serial.println(topic);
-  Serial.print("Message:");
-  for (int i = 0; i < length; i++) {
-    Serial.print((char)payload[i]);
-  }
-  Serial.println(""); // 改行を追加
-  // payloadを文字列に変換
+  Serial.println("Topic: " + String(topic));
   String message = String((char*)payload).substring(0, length);
-  // payloadがonの場合、LEDを点灯
-  if (message == "on") {
-    Serial.println("LED ON");
-    // LEDを点灯する処理をここに追加
-  } else if (message == "off") {
-    Serial.println("LED OFF");
-    // LEDを消灯する処理をここに追加
-  } else {
-    Serial.println("Unknown command");
+  Serial.println("Message: " + message);
+
+  // 受信したトピックに応じて処理を分岐
+  if (String(topic) == subscribeTopic_5dk) {
+    Serial.println("Received message for 5th dorm key: " + message);
+  } else if (String(topic) == publishTopic_1l) {
+    Serial.println("Received message from 1st lab: " + message);
+    // payloadがonの場合、LEDを点灯
+    if (message == "light status: on") {
+      Serial.println("LED ON");
+      digitalWrite(ledPin, HIGH); // LEDを点灯
+    } else if (message == "light status: off") {
+      Serial.println("LED OFF");
+      digitalWrite(ledPin, LOW); // LEDを消灯
+    }
+  } else if (String(topic) == publishTopic_5dd) {
+    Serial.println("Received message from 5th dorm door: " + message);
   }
 
 
-  Serial.println();
   Serial.println("-----------------------");
 }
 
@@ -76,7 +82,9 @@ void reconnect() {
     clientId += WiFi.macAddress();
     if (client.connect(clientId.c_str(), mqtt_user, mqtt_password)) {
       Serial.println("connected");
-      client.subscribe(subscribeTopic);
+      client.subscribe(subscribeTopic_5dk);
+      client.subscribe(publishTopic_1l);
+      client.subscribe(publishTopic_5dd);
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
@@ -89,7 +97,7 @@ void reconnect() {
 void publishStatus() {
   unsigned long currentTime = millis() - startTime;
   String statusMessage = "Uptime: " + String(currentTime / 1000) + " seconds";
-  client.publish(publishTopic, statusMessage.c_str());
+  client.publish(publishTopic_1l, statusMessage.c_str());
   Serial.print("Published status: ");
   Serial.println(statusMessage);
 }
@@ -100,6 +108,9 @@ void setup() {
   client.setServer(mqtt_server, mqtt_port);
   client.setCallback(callback);
   startTime = millis();
+  
+  pinMode(ledPin, OUTPUT); // LEDピンを出力モードに設定
+  digitalWrite(ledPin, LOW); // 初期状態はLEDを消灯
 }
 
 void loop() {
@@ -110,12 +121,7 @@ void loop() {
       reconnect();
     }
   }
-  client.loop();
+  client.loop(); // MQTTメッセージの処理
 
-  // 5秒ごとにステータスをPublish
-  if (millis() - lastReconnectAttempt > 5000 && client.connected()) {
-    publishStatus();
-    lastReconnectAttempt = millis(); // publish後もタイマーをリセット
-  }
-  delay(100); // CPU負荷軽減のためเล็กน้อยの遅延
+  delay(100); // CPU負荷軽減のために少し待機
 }
