@@ -2,6 +2,7 @@
 
 #include <WiFi.h>
 #include <PubSubClient.h>
+#include <WiFiUdp.h>
 
 #include "Hardware_Control_Assistant.hpp"
 
@@ -32,6 +33,24 @@ unsigned long startTime = 0;
 const uint8_t enable_call_pin = 22; // GPIO22を使用 (通話開始用)
 hca::Button_CHT enable_call_button(100); // 1秒間の長押しで通話開始
 
+String receiverIP = "";  // 受信者のIPアドレスを格納する変数 通話直前に相手から送られてくる
+const int receiverPort = 12345; // 受信者のポート番号
+const int senderPort = 54321;
+
+WiFiUDP udp;
+
+const int micPin = 34;
+const int sampleRate = 8000;
+const int bitsPerSample = 16; // 1サンプルあたり16ビット
+const int bytesPerSample = bitsPerSample / 8;
+const int samplesPerPacket = 16; // 1パケットあたりのサンプル数
+const int packetSize = samplesPerPacket * bytesPerSample; // パケットサイズ (バイト)
+
+int16_t pcmValue;
+static uint8_t pcmBuffer[packetSize];
+
+bool isCalling = false; // 通話中かどうかのフラグ
+
 void setup_wifi() {
   delay(10);
   Serial.println();
@@ -52,6 +71,7 @@ void setup_wifi() {
 }
 
 void callback(char* topic, byte* payload, unsigned int length) {
+  Serial.println("-----------------------");
   Serial.println("Topic: " + String(topic));
   String message = String((char*)payload).substring(0, length);
   Serial.println("Message: " + message);
@@ -62,10 +82,11 @@ void callback(char* topic, byte* payload, unsigned int length) {
   } else if (String(topic) == String(publishTopic_1l)) {
     Serial.println("Received message from 1st lab: " + message);
     // "IP address: "が含まれていたら、その後の部分を取得
-    if (message.indexOf("IP address: ") != -1) {
-      String receiverIpAddress = message.substring(message.indexOf("IP address: ") + 12);
-      Serial.println("Receiver IP address: " + receiverIpAddress);
-      // ここでIPアドレスを使用する処理を追加できます
+    if (message.indexOf("IP: ") != -1) {
+      receiverIP = message.substring(message.indexOf("IP: ") + 4);
+      Serial.println("Receiver IP address: " + receiverIP);
+      udp.begin(senderPort);
+      isCalling = true; // 通話中フラグを立てる
     }
   } else if (String(topic) == String(publishTopic_5dk)) {
     Serial.println("Received message from 5th dorm key: " + message);
@@ -129,9 +150,30 @@ void loop() {
   if (enable_call_button.is_pushed()) { // 通話開始用ピンがHIGHの場合
     Serial.println("通話開始ボタンが押されました。");
     publishTopic(subscribeTopic_1l, "call start: " + String(WiFi.localIP().toString()));
+    // ここではisCallingフラグを立てない（IPアドレスを受信したときに開始するため）
   } else if (enable_call_button.is_released()) { // 通話開始用ピンがLOWの場合
     Serial.println("通話開始ボタンが離されました。");
     publishTopic(subscribeTopic_1l, "call end: " + String(WiFi.localIP().toString()));
+    isCalling = false; // 通話中フラグを下ろす
+    udp.stop(); // UDP通信を停止
   }
-  delay(100); // CPU負荷軽減のために少し待機
+
+  // 通話中
+  if (isCalling) {
+    for (int i = 0; i < samplesPerPacket; i++) {
+      int rawValue = analogRead(micPin);
+      // 12ビットのADC値を16ビットの符号付き整数にマッピング
+      pcmValue = map(rawValue, 0, 4095, -32768, 32767);
+      pcmBuffer[i * 2] = (pcmValue >> 0) & 0xFF;     // 下位バイト
+      pcmBuffer[i * 2 + 1] = (pcmValue >> 8) & 0xFF; // 上位バイト
+      delayMicroseconds(1000000 / sampleRate);
+    }
+  
+    // const char* receiverIP = "192.168.0.218";  // 受信者のIPアドレスを指定
+    // udp.beginPacket(receiverIP, receiverPort); // 受信者のIPアドレスとポート番号を指定
+    udp.beginPacket(receiverIP.c_str(), receiverPort); // 受信者のIPアドレスとポート番号を指定
+    udp.write(pcmBuffer, packetSize);
+    udp.endPacket();
+    Serial.printf("Sent %d bytes (PCM)\n", packetSize);
+}
 }
