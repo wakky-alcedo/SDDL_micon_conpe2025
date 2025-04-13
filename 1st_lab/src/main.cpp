@@ -9,10 +9,10 @@
 #include <ArduinoJson.h>
 
 // Wi-Fiの設定
-const char* ssid = "SDDLnet";
-const char* password = "smallbear";
-// const char* ssid = "Hippopotamus";
-// const char* password = "origami2827";
+// const char* ssid = "SDDLnet";
+// const char* password = "smallbear";
+const char* ssid = "Hippopotamus";
+const char* password = "origami2827";
 
 // MQTTブローカーの設定
 const char* mqtt_server = "192.168.0.206"; // MQTTブローカーのIPアドレス todo
@@ -261,7 +261,7 @@ void setup() {
   myDFPlayer.volume(20); // Set volume value (0-30).
   Serial.println("MP3 Player ready.");
   // myDFPlayer.play(1);  //Play the first mp3
-  Serial.println("Playing track 1.");
+  // Serial.println("Playing track 1.");
 }
 
 void loop() {
