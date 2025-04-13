@@ -117,6 +117,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
       digitalWrite(callLedPin, HIGH);
       isCalling = false; // 通話終了フラグをリセット
       udp.stop(); // UDPを停止
+      dacWrite(speakerPin, 0);      
     }
   } else if (String(topic) == String(publishTopic_5dd)) {
     Serial.println("Received message on topic: " + String(topic));
