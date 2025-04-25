@@ -49,6 +49,7 @@ void setup_wifi() {
 }
 
 void callback(char* topic, byte* payload, unsigned int length) {
+  Serial.println("-----------------------");
   Serial.println("Topic: " + String(topic));
   String message = String((char*)payload).substring(0, length);
   Serial.println("Message: " + message);
